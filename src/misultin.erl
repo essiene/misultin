@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 % API
--export([start_link/1, stop/0, create_acceptor/0]).
+-export([start_link/1, start_link/2, stop/0, create_acceptor/0]).
 
 % macros
 -define(SERVER, ?MODULE).
@@ -59,8 +59,15 @@
 
 % Function: {ok,Pid} | ignore | {error, Error}
 % Description: Starts the server.
-start_link(Options) when is_list(Options) ->
-	gen_server:start_link({local, ?SERVER}, ?MODULE, [Options], []).
+start_link(Options) when is_list(Options) -> 
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Options], []).
+
+start_link(Loop, ConfigPath) when is_function(Loop), is_list(ConfigPath) ->
+    {ok, Config} = erlcfg:new(ConfigPath),
+    Ip = Config:get(misultin.ip, "0.0.0.0"),
+    Port = Config:get(misultin.port, 80),
+    Backlog = Config:get(misultin.backlog, 30),
+    start_link([{loop, Loop}, {ip, Ip}, {port, Port}, {backlog, Backlog}]).
 
 % Function: -> ok
 % Description: Manually stops the server.
