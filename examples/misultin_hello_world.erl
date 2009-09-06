@@ -31,8 +31,10 @@
 -export([start/1, start/2, stop/0, handle_http/1]).
 
 % start misultin http server
-start(Port) ->
-	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end}]).
+start(Port) when is_integer(Port) ->
+	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end}]);
+start(Config) ->
+    misultin:start_link(fun ?MODULE:handle_http/1, Config).
 
 start(Ip, Port) ->
     misultin:start_link([{ip, Ip}, {port, Port}, {loop, fun
