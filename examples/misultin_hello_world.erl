@@ -28,11 +28,15 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_hello_world).
--export([start/1, stop/0, handle_http/1]).
+-export([start/1, start/2, stop/0, handle_http/1]).
 
 % start misultin http server
 start(Port) ->
 	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end}]).
+
+start(Ip, Port) ->
+    misultin:start_link([{ip, Ip}, {port, Port}, {loop, fun
+                    ?MODULE:handle_http/1}]).
 
 % stop misultin
 stop() ->
