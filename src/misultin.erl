@@ -85,22 +85,11 @@ init([Options]) ->
 	process_flag(trap_exit, true),
 	?DEBUG(info, "starting with Pid: ~p", [self()]),
 	% test and get options
-    IpConvert = fun(Ip) ->
-            case inet_parse:address(Ip) of
-                {ok, IpAddr} ->
-                    IpAddr;
-                {error, Other} ->
-                    {error, Other}
-            end
-    end,
-
-    DoNothing = fun(V) -> V end,
-
     OptionProps = [
-        {ip, {0,0,0,0}, fun is_list/1, ip_not_string, IpConvert},
-        {port, 80, fun is_integer/1, port_not_integer, DoNothing},
-        {loop, {error, undefined_loop}, fun is_function/1, loop_not_function, DoNothing},
-        {backlog, 30, fun is_integer/1, backlog_not_integer, DoNothing}
+        {ip, "0.0.0.0", fun is_list/1, ip_not_string},
+        {port, 80, fun is_integer/1, port_not_integer},
+        {loop, {error, undefined_loop}, fun is_function/1, loop_not_function},
+        {backlog, 30, fun is_integer/1, backlog_not_integer}
     ],
 
 	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionProps),
@@ -108,26 +97,31 @@ init([Options]) ->
 		undefined ->
 			% get options
             Ip = proplists:get_value(ip, OptionsVerified),
-			Port = proplists:get_value(port, OptionsVerified),
-			Loop = proplists:get_value(loop, OptionsVerified),
-			Backlog = proplists:get_value(backlog, OptionsVerified),
-			% ok, no error found in options -> create listening socket.
-			% {backlog, 30} specifies the length of the OS accept queue
-			% {packet, http} puts the socket into http mode. This makes the socket wait for a HTTP Request line,
-			% and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
-			% mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
-			% following HTTP Request line.
-			case gen_tcp:listen(Port, [binary, {packet, http}, {ip, Ip}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
-				{ok, ListenSocket} ->
-					% create first acceptor process
-					?DEBUG(debug, "creating first acceptor process", []),
-					AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop),
-					{ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid}};
-				{error, Reason} ->
-					?DEBUG(error, "error starting: ~p", [Reason]),
-					% error
-					{stop, Reason}
-			end;
+            case inet_parse:address(Ip) of
+                {error, Reason} ->
+                    {stop, {Reason, Ip}};
+                {ok, IpTuple} ->
+                    Port = proplists:get_value(port, OptionsVerified),
+                    Loop = proplists:get_value(loop, OptionsVerified),
+                    Backlog = proplists:get_value(backlog, OptionsVerified),
+                    % ok, no error found in options -> create listening socket.
+                    % {backlog, 30} specifies the length of the OS accept queue
+                    % {packet, http} puts the socket into http mode. This makes the socket wait for a HTTP Request line,
+                    % and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
+                    % mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
+                    % following HTTP Request line.
+                    case gen_tcp:listen(Port, [binary, {packet, http}, {ip, IpTuple}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
+                        {ok, ListenSocket} ->
+                            % create first acceptor process
+                            ?DEBUG(debug, "creating first acceptor process", []),
+                            AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop),
+                            {ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid}};
+                        {error, Reason} ->
+                            ?DEBUG(error, "error starting: ~p", [Reason]),
+                            % error
+                            {stop, Reason}
+                    end
+            end;
 		Reason ->
 			% error found in options
 			{stop, Reason}
@@ -217,7 +211,7 @@ code_change(_OldVsn, State, _Extra) ->
 % ============================ \/ INTERNAL FUNCTIONS =======================================================
 
 % Description: Validate and get misultin options.
-get_option({Tag, DefaultValue, TypeCheckFun, FailTypeError, OnTrueFun}, Options) ->
+get_option({Tag, DefaultValue, TypeCheckFun, FailTypeError}, Options) ->
     case proplists:get_value(Tag, Options) of
         undefined ->
             case DefaultValue of
@@ -230,13 +224,8 @@ get_option({Tag, DefaultValue, TypeCheckFun, FailTypeError, OnTrueFun}, Options)
             case TypeCheckFun(Value) of
                 false ->
                     {error, {FailTypeError, Value}};
-                true ->
-                    case OnTrueFun(Value) of
-                        {error, Reason} ->
-                            {error, {Reason, Value}};
-                        Result ->
-                            {Tag, Result}
-                    end
+                true -> 
+                    {Tag, Value}
             end
     end.
 % ============================ /\ INTERNAL FUNCTIONS =======================================================
