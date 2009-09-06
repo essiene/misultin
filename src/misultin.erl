@@ -97,35 +97,40 @@ init([Options]) ->
 		undefined ->
 			% get options
             Ip = proplists:get_value(ip, OptionsVerified),
-            case inet_parse:address(Ip) of
-                {error, Reason} ->
-                    {stop, {Reason, Ip}};
-                {ok, IpTuple} ->
-                    Port = proplists:get_value(port, OptionsVerified),
-                    Loop = proplists:get_value(loop, OptionsVerified),
-                    Backlog = proplists:get_value(backlog, OptionsVerified),
-                    % ok, no error found in options -> create listening socket.
-                    % {backlog, 30} specifies the length of the OS accept queue
-                    % {packet, http} puts the socket into http mode. This makes the socket wait for a HTTP Request line,
-                    % and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
-                    % mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
-                    % following HTTP Request line.
-                    case gen_tcp:listen(Port, [binary, {packet, http}, {ip, IpTuple}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
-                        {ok, ListenSocket} ->
-                            % create first acceptor process
-                            ?DEBUG(debug, "creating first acceptor process", []),
-                            AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop),
-                            {ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid}};
-                        {error, Reason} ->
-                            ?DEBUG(error, "error starting: ~p", [Reason]),
-                            % error
-                            {stop, Reason}
-                    end
-            end;
+            Port = proplists:get_value(port, OptionsVerified),
+            Loop = proplists:get_value(loop, OptionsVerified),
+            Backlog = proplists:get_value(backlog, OptionsVerified),
+
+            % ok, no error found in options -> create listening socket.
+            init(Ip, Port, Loop, Backlog);
 		Reason ->
 			% error found in options
 			{stop, Reason}
 	end.
+init(Ip, Port, Loop, Backlog) ->
+    % {backlog, 30} specifies the length of the OS accept queue
+    % {packet, http} puts the socket into http mode. This makes the socket wait for a HTTP Request line,
+    % and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
+    % mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
+    % following HTTP Request line.
+
+    % First convert Ip from "A.B.C.D" to {A,B,C,D} with inet_parse:address/1
+    case inet_parse:address(Ip) of
+        {error, Reason} ->
+            {stop, {Reason, Ip}};
+        {ok, IpTuple} ->
+            case gen_tcp:listen(Port, [binary, {packet, http}, {ip, IpTuple}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
+                {ok, ListenSocket} ->
+                    % create first acceptor process
+                    ?DEBUG(debug, "creating first acceptor process", []),
+                    AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop),
+                    {ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid}};
+                {error, Reason} ->
+                    ?DEBUG(error, "error starting: ~p", [Reason]),
+                    % error
+                    {stop, Reason}
+            end
+    end.
 
 % ----------------------------------------------------------------------------------------------------------
 % Function: handle_call(Request, From, State) -> {reply, Reply, State} | {reply, Reply, State, Timeout} |
