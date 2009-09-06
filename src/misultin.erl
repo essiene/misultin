@@ -85,11 +85,12 @@ init([Options]) ->
 	process_flag(trap_exit, true),
 	?DEBUG(info, "starting with Pid: ~p", [self()]),
 	% test and get options
-	OptionNames = [port, loop, backlog],
+	OptionNames = [ip, port, loop, backlog],
 	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionNames),
 	case proplists:get_value(error, OptionsVerified) of
 		undefined ->
 			% get options
+            Ip = proplists:get_value(ip, OptionsVerified),
 			Port = proplists:get_value(port, OptionsVerified),
 			Loop = proplists:get_value(loop, OptionsVerified),
 			Backlog = proplists:get_value(backlog, OptionsVerified),
@@ -99,7 +100,7 @@ init([Options]) ->
 			% and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
 			% mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
 			% following HTTP Request line.
-			case gen_tcp:listen(Port, [binary, {packet, http}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
+			case gen_tcp:listen(Port, [binary, {packet, http}, {ip, Ip}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
 				{ok, ListenSocket} ->
 					% create first acceptor process
 					?DEBUG(debug, "creating first acceptor process", []),
@@ -199,6 +200,24 @@ code_change(_OldVsn, State, _Extra) ->
 % ============================ \/ INTERNAL FUNCTIONS =======================================================
 
 % Description: Validate and get misultin options.
+get_option(ip, Options) ->
+	case proplists:get_value(ip, Options) of
+		undefined ->
+			% default to 0.0.0.0
+			{ip, {0,0,0,0}};
+		Ip ->
+            case is_list(Ip) of 
+                false -> 
+                    {error, {ip_not_string, Ip}}; 
+                true -> 
+                    case inet_parse:address(Ip) of 
+                        {ok, IpTuple} -> 
+                            {ip, IpTuple}; 
+                        _Other -> 
+                            {error, {ip_address_not_valid, Ip}} 
+                    end 
+            end 
+    end;
 get_option(port, Options) ->
 	case proplists:get_value(port, Options) of
 		undefined ->
