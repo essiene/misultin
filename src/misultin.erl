@@ -85,8 +85,25 @@ init([Options]) ->
 	process_flag(trap_exit, true),
 	?DEBUG(info, "starting with Pid: ~p", [self()]),
 	% test and get options
-	OptionNames = [ip, port, loop, backlog],
-	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionNames),
+    IpConvert = fun(Ip) ->
+            case inet_parse:address(Ip) of
+                {ok, IpAddr} ->
+                    IpAddr;
+                {error, Other} ->
+                    {error, Other}
+            end
+    end,
+
+    DoNothing = fun(V) -> V end,
+
+    OptionProps = [
+        {ip, {0,0,0,0}, fun is_list/1, ip_not_string, IpConvert},
+        {port, 80, fun is_integer/1, port_not_integer, DoNothing},
+        {loop, {error, undefined_loop}, fun is_function/1, loop_not_function, DoNothing},
+        {backlog, 30, fun is_integer/1, backlog_not_integer, DoNothing}
+    ],
+
+	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionProps),
 	case proplists:get_value(error, OptionsVerified) of
 		undefined ->
 			% get options
@@ -200,68 +217,26 @@ code_change(_OldVsn, State, _Extra) ->
 % ============================ \/ INTERNAL FUNCTIONS =======================================================
 
 % Description: Validate and get misultin options.
-get_option(ip, Options) ->
-	case proplists:get_value(ip, Options) of
-		undefined ->
-			% default to 0.0.0.0
-			{ip, {0,0,0,0}};
-		Ip ->
-            case is_list(Ip) of 
-                false -> 
-                    {error, {ip_not_string, Ip}}; 
-                true -> 
-                    case inet_parse:address(Ip) of 
-                        {ok, IpTuple} -> 
-                            {ip, IpTuple}; 
-                        _Other -> 
-                            {error, {ip_address_not_valid, Ip}} 
-                    end 
-            end 
-    end;
-get_option(port, Options) ->
-	case proplists:get_value(port, Options) of
-		undefined ->
-			% default to 80
-			{port, 80};
-		Port ->
-			case is_integer(Port) of
-				false ->
-					% error
-					{error, {port_not_integer, Port}};
-				true ->
-					% ok
-					{port, Port}
-			end	
-	end;
-get_option(loop, Options) ->
-	case proplists:get_value(loop, Options) of
-		undefined ->
-			% error
-			{error, undefined_loop};
-		Loop ->
-			case is_function(Loop) of
-				false ->
-					% error
-					{error, {loop_not_function, Loop}};
-				true ->
-					% ok
-					{loop, Loop}
-			end
-	end;
-get_option(backlog, Options) ->
-	case proplists:get_value(backlog, Options) of
-		undefined ->
-			% default to 30
-			{backlog, 30};
-		Backlog ->
-			case is_integer(Backlog) of
-				false ->
-					% error
-					{error, {backlog_not_integer, Backlog}};
-				true ->
-					% ok
-					{backlog, Backlog}
-			end	
-	end.
-
+get_option({Tag, DefaultValue, TypeCheckFun, FailTypeError, OnTrueFun}, Options) ->
+    case proplists:get_value(Tag, Options) of
+        undefined ->
+            case DefaultValue of
+                {error, Reason} ->
+                    {error, Reason};
+                Value -> 
+                    {Tag, Value}
+            end;
+        Value ->
+            case TypeCheckFun(Value) of
+                false ->
+                    {error, {FailTypeError, Value}};
+                true ->
+                    case OnTrueFun(Value) of
+                        {error, Reason} ->
+                            {error, {Reason, Value}};
+                        Result ->
+                            {Tag, Result}
+                    end
+            end
+    end.
 % ============================ /\ INTERNAL FUNCTIONS =======================================================
