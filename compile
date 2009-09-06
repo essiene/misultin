@@ -57,5 +57,6 @@ done
 
 # compile in main src/ to ebin/ dir
 echo -n "compiling... "
+[[ -d ${misultin_home}/ebin/ ]] || mkdir ${misultin_home}/ebin/
 erlc ${debug} -o ${misultin_home}/ebin/ ${misultin_home}/src/*
 echo "ok."
