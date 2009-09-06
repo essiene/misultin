@@ -237,5 +237,4 @@ get_option({OptionName, DefaultValue, CheckAndConvertFun, FailTypeError}, Option
 					{OptionName, OutValue}
 			end
 	end.
-
 % ============================ /\ INTERNAL FUNCTIONS =======================================================
