@@ -63,6 +63,12 @@ API Documentation is available online on the Misultin's wiki: http://code.google
 CHANGELOG
 ==========================================================================================================
 
+0.2.2: - added .app file [thanks to Essien Ita Essien]
+       - simplified get_options [thanks to Essien Ita Essien]
+       - added ip address option [thanks to Essien Ita Essien]
+       - added ipv6 support
+       - bug correction on requests peer address and port being reset on open connections
+
 0.2.1: - added support for Content-Type that specifies charset in POST data [thanks to Tuncer Ayaz]
        - added support for iolist in misultin_req:ok/1,2 and misultin_req:respond/2,3
        - code optimized taking out unnecessary binary conversion and lists:flatten [thanks to Feng Yu]

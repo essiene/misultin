@@ -58,5 +58,10 @@ done
 # compile in main src/ to ebin/ dir
 echo -n "compiling... "
 [[ -d ${misultin_home}/ebin/ ]] || mkdir ${misultin_home}/ebin/
-erlc ${debug} -o ${misultin_home}/ebin/ ${misultin_home}/src/*
+erlc ${debug} -o ${misultin_home}/ebin/ ${misultin_home}/src/*.erl
+echo "ok."
+
+# copy .app file
+echo -n "copying... "
+cp ${misultin_home}/src/misultin.app ${misultin_home}/ebin/misultin.app
 echo "ok."
