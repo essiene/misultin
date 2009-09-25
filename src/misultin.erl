@@ -32,7 +32,7 @@
 % ==========================================================================================================
 -module(misultin).
 -behaviour(gen_server).
--vsn('0.2.2').
+-vsn('0.3').
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -47,9 +47,9 @@
 -record(state, {
 	listen_socket,
 	port,
-	acceptor,
 	loop,
-	recv_timeout
+	recv_timeout,
+	acceptor
 }).
 
 % includes
@@ -97,7 +97,7 @@ init([Options]) ->
 		{ip, {0, 0, 0, 0}, fun check_and_convert_string_to_ip/1, invalid_ip},
 		{port, 80, fun is_integer/1, port_not_integer},
 		{loop, {error, undefined_loop}, fun is_function/1, loop_not_function},
-		{backlog, 30, fun is_integer/1, backlog_not_integer},
+		{backlog, 128, fun is_integer/1, backlog_not_integer},
 		{recv_timeout, 30*1000, fun is_integer/1, recv_timeout_not_integer}
 	],
 	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionProps),
@@ -120,15 +120,11 @@ init([Options]) ->
 					inet6
 			end,
 			% ok, no error found in options -> create listening socket.
-			% {backlog, 30} specifies the length of the OS accept queue
-			% {packet, http} puts the socket into http mode. This makes the socket wait for a HTTP Request line,
-			% and if this is received to immediately switch to receiving HTTP header lines. The socket stays in header
-			% mode until the end of header marker is received (CR,NL,CR,NL), at which time it goes back to wait for a
-			% following HTTP Request line.
 			case gen_tcp:listen(Port, [binary, {packet, http}, InetOpt, {ip, Ip}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
 				{ok, ListenSocket} ->
-					% create first acceptor process
-					?DEBUG(debug, "creating first acceptor process", []),
+					% start listening
+					?DEBUG(debug, "starting listener loop", []),
+					% create acceptor
 					AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop, RecvTimeout),
 					{ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid, recv_timeout = RecvTimeout}};
 				{error, Reason} ->
@@ -202,21 +198,11 @@ handle_cast(_Msg, State) ->
 % Description: Handling all non call/cast messages.
 % ----------------------------------------------------------------------------------------------------------
 
-% The current acceptor has died normally, ignore
-handle_info({'EXIT', Pid, normal}, #state{acceptor = Pid} = State) ->
-	?DEBUG(debug, "current acceptor has died normally", []),
-	{noreply, State};
-
-% The current acceptor has died abnormally, wait a little and try again
-handle_info({'EXIT', Pid, _Abnormal}, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = Pid, recv_timeout = RecvTimeout} = State) ->
-	?DEBUG(warning, "current acceptor has died with reason: ~p, respawning", [_Abnormal]),
+% The current acceptor has died, respawn
+handle_info({'EXIT', Pid, _Reason}, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = Pid, recv_timeout = RecvTimeout} = State) ->
+	?DEBUG(warning, "acceptor has died with reason: ~p, respawning", [_Reason]),
 	AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop, RecvTimeout),
 	{noreply, State#state{acceptor = AcceptorPid}};
-
-% An acceptor has died, ignore
-handle_info({'EXIT', _Pid, _Reason}, State) ->
-	?DEBUG(debug, "the acceptor has died with reason: ~p", [_Reason]),
-	{noreply, State};
 
 % handle_info generic fallback (ignore)
 handle_info(_Info, State) ->

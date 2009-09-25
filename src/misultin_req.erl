@@ -32,7 +32,7 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_req, [Req, SocketPid]).
--vsn('0.2.2').
+-vsn('0.3').
 
 % macros
 -define(PERCENT, 37).  % $\%
@@ -87,9 +87,6 @@ stream(Template, Vars) when is_list(Template) =:= true ->
 	SocketPid ! {stream_data, io_lib:format(Template, Vars)}.
 stream(head, HttpCode, Headers) ->
 	SocketPid ! {stream_head, HttpCode, Headers}.
-
-% Description: Sends a file for download.
-
 	
 % Description: Sends a file to the browser.
 file(FilePath) ->
