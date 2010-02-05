@@ -28,7 +28,7 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_hello_world).
--export([start/1, start/2, stop/0, handle_http/1]).
+-export([start/1, stop/0]).
 
 % start misultin http server
 start(Port) when is_integer(Port) ->

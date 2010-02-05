@@ -1,9 +1,9 @@
 % ==========================================================================================================
-% MISULTIN - Example: Echoes inputted GET variables into an XML.
+% MISULTIN - Websocket Request
 %
 % >-|-|-(°>
 % 
-% Copyright (C) 2009, Roberto Ostinelli <roberto@ostinelli.net>
+% Copyright (C) 2010, Roberto Ostinelli <roberto@ostinelli.net>.
 % All rights reserved.
 %
 % BSD License
@@ -12,11 +12,11 @@
 % that the following conditions are met:
 %
 %  * Redistributions of source code must retain the above copyright notice, this list of conditions and the
-%    following disclaimer.
+%	 following disclaimer.
 %  * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and
-%    the following disclaimer in the documentation and/or other materials provided with the distribution.
+%	 the following disclaimer in the documentation and/or other materials provided with the distribution.
 %  * Neither the name of the authors nor the names of its contributors may be used to endorse or promote
-%    products derived from this software without specific prior written permission.
+%	 products derived from this software without specific prior written permission.
 %
 % THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
 % WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
@@ -27,32 +27,44 @@
 % NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
--module(misultin_echo).
--export([start/1, stop/0]).
+-module(misultin_ws, [Ws, SocketPid]).
+-vsn('0.4.0').
 
-% start misultin http server
-start(Port) ->
-	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end}]).
+% API
+-export([raw/0, get/1, send/1]).
 
-% stop misultin
-stop() ->
-	misultin:stop().
+% includes
+-include("../include/misultin.hrl").
 
-% callback on request received
-handle_http(Req) ->	
-	% get params depending on method
-	Method = Req:get(method),
-	case Method of
-		'GET' ->
-			Args = Req:parse_qs();
-		'POST' ->
-			Args = Req:parse_post()
-	end,
-	% build an XML with all parameters and values
-	BuildXml = fun({Param, Value}, Acc) ->
-		[lists:flatten(io_lib:format("<param><name>~s</name><value>~s</value></param>", [Param, Value]))|Acc]
-	end,
-	Xml = lists:flatten(lists:reverse(lists:foldl(BuildXml, [], Args))),
-	% output
-	Req:ok([{"Content-Type", "text/xml"}], "<misultin_test><method>~s</method>~s</misultin_test>", [Method, Xml]).
 
+% ============================ \/ API ======================================================================
+
+% Description: Returns raw websocket content.
+raw() ->
+	Ws.
+
+% Description: Get websocket info.
+get(socket) ->
+	Ws#ws.socket;
+get(peer_addr) ->
+	Ws#ws.peer_addr;
+get(peer_port) ->
+	Ws#ws.peer_port;
+get(origin) ->
+	Ws#ws.origin;
+get(host) ->
+	Ws#ws.host;
+get(path) ->
+	Ws#ws.path.
+	
+% send data
+send(Data) ->
+	SocketPid ! {send, Data}.
+		
+% ============================ /\ API ======================================================================
+
+
+
+% ============================ \/ INTERNAL FUNCTIONS =======================================================
+
+% ============================ /\ INTERNAL FUNCTIONS =======================================================

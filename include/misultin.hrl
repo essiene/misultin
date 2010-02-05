@@ -55,6 +55,7 @@
 
 % Request
 -record(req, {
+	socket,						% the socket handling the request
 	peer_addr,					% peer IP | undefined
 	peer_port,					% peer port | undefined
 	connection = keep_alive,	% keep_alive | close
@@ -65,4 +66,14 @@
 	args = "",					% Part of URI after ?
 	headers,					% [{Tag, Val}]
 	body = <<>>					% Content Body
+}).
+
+% Websocket Request
+-record(ws, {
+	socket,						% the socket handling the request
+	peer_addr,					% peer IP | undefined
+	peer_port,					% peer port | undefined
+	origin,						% the originator
+	host,						% the host
+	path						% the websocket GET request path
 }).
