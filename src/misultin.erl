@@ -65,7 +65,7 @@ start_link(Options) when is_list(Options) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Options], []).
 
 start_link(Loop, ConfigPath) when is_function(Loop), is_list(ConfigPath) ->
-    {ok, Config} = erlcfg:new(ConfigPath),
+    {ok, Config} = erlcfg:new(ConfigPath, true),
     Ip = Config:get(misultin.ip, "0.0.0.0"),
     Port = Config:get(misultin.port, 80),
     Backlog = Config:get(misultin.backlog, 30),
