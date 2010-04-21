@@ -65,7 +65,6 @@ CHANGELOG
 
 0.5:   - added SSL support
        - refactoring of the acceptor loop
-       - minor improvements
 
 0.4:   - added preliminary websocket support
 
