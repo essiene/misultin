@@ -28,7 +28,7 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_ws, [Ws, SocketPid]).
--vsn("0.6.0").
+-vsn("0.6.1").
 
 % API
 -export([raw/0, get/1, send/1]).
@@ -59,7 +59,9 @@ get(origin) ->
 get(host) ->
 	Ws#ws.host;
 get(path) ->
-	Ws#ws.path.
+	Ws#ws.path;
+get(headers) ->
+	Ws#ws.headers.
 	
 % send data
 send(Data) ->

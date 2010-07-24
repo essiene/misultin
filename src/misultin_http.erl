@@ -31,7 +31,7 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_http).
--vsn("0.6.0").
+-vsn("0.6.1").
 
 % API
 -export([handle_data/8]).
@@ -145,7 +145,7 @@ headers(#c{sock = Sock, socket_mode = SocketMode, recv_timeout = RecvTimeout, ws
 					body(C, Req#req{headers = Headers});
 				{true, Origin, Host, Path} ->
 					?LOG_DEBUG("websocket request received", []),
-					misultin_websocket:connect(#ws{socket = Sock, socket_mode = SocketMode, peer_addr = Req#req.peer_addr, peer_port = Req#req.peer_port, origin = Origin, host = Host, path = Path}, WsLoop)
+					misultin_websocket:connect(#ws{socket = Sock, socket_mode = SocketMode, peer_addr = Req#req.peer_addr, peer_port = Req#req.peer_port, origin = Origin, host = Host, path = Path, headers = Headers}, WsLoop)
 			end;
 		{SocketMode, Sock, _Other} ->
 			?LOG_DEBUG("tcp error treating headers: ~p, send bad request error back", [_Other]),

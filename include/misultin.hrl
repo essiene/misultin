@@ -87,5 +87,6 @@
 	peer_cert,					% undefined | the DER encoded peer certificate that can be decoded with public_key:pkix_decode_cert/2
 	origin,						% the originator
 	host,						% the host
-	path						% the websocket GET request path
+	path,						% the websocket GET request path
+	headers						% [{Tag, Val}]
 }).
