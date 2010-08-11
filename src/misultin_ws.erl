@@ -54,6 +54,8 @@ get(peer_port) ->
 	Ws#ws.peer_port;
 get(peer_cert) ->
 	Ws#ws.peer_cert;
+get(vsn) ->
+	Ws#ws.vsn;
 get(origin) ->
 	Ws#ws.origin;
 get(host) ->
@@ -62,7 +64,7 @@ get(path) ->
 	Ws#ws.path;
 get(headers) ->
 	Ws#ws.headers.
-	
+
 % send data
 send(Data) ->
 	SocketPid ! {send, Data}.
