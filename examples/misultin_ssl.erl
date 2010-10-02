@@ -1,5 +1,5 @@
 % ==========================================================================================================
-% MISULTIN - Example: Sends file as attachment.
+% MISULTIN - Example: Hello World SSL.
 %
 % >-|-|-(°>
 % 
@@ -27,12 +27,18 @@
 % NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
--module(misultin_file).
+-module(misultin_ssl).
 -export([start/1, stop/0]).
 
 % start misultin http server
 start(Port) ->
-	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end}]).
+	misultin:start_link([{port, Port}, {loop, fun(Req) -> handle_http(Req) end},
+		{ssl, [
+			{certfile, "../priv/test_certificate.pem"},
+			{keyfile, "../priv/test_privkey.pem"},
+			{password, "misultin"}
+		]}
+	]).
 
 % stop misultin
 stop() ->
@@ -40,4 +46,6 @@ stop() ->
 
 % callback on request received
 handle_http(Req) ->	
-	Req:file(attachment, "1.png").
+	% output
+	Req:ok("Hello World SSL.").
+

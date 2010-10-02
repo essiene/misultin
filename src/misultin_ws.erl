@@ -28,7 +28,7 @@
 % POSSIBILITY OF SUCH DAMAGE.
 % ==========================================================================================================
 -module(misultin_ws, [Ws, SocketPid]).
--vsn('0.4.0').
+-vsn("0.6.1").
 
 % API
 -export([raw/0, get/1, send/1]).
@@ -46,17 +46,25 @@ raw() ->
 % Description: Get websocket info.
 get(socket) ->
 	Ws#ws.socket;
+get(socket_mode) ->
+	Ws#req.socket_mode;
 get(peer_addr) ->
 	Ws#ws.peer_addr;
 get(peer_port) ->
 	Ws#ws.peer_port;
+get(peer_cert) ->
+	Ws#ws.peer_cert;
+get(vsn) ->
+	Ws#ws.vsn;
 get(origin) ->
 	Ws#ws.origin;
 get(host) ->
 	Ws#ws.host;
 get(path) ->
-	Ws#ws.path.
-	
+	Ws#ws.path;
+get(headers) ->
+	Ws#ws.headers.
+
 % send data
 send(Data) ->
 	SocketPid ! {send, Data}.

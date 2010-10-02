@@ -13,7 +13,7 @@ INSTALL INSTRUCTIONS
 Run the appropriate script:
 
     * OSX | Linux users:  make
-    * Windows users: compile.bat. Note that Erlang bin directory (by default, C:\Program Files\erl5.7.2\bin\) must be in your path for the script to work.
+    * Windows users: make.bat. Note that Erlang bin directory (by default, C:\Program Files\erl5.7.2\bin\) must be in your path for the script to work.
 
 This script will compile the .erl files in the Misultin src directory and save the compiled files into the ebin directory.
 
@@ -37,7 +37,7 @@ If you did not proceed with step 2, copy the file misultin_hello_world.erl from 
 In the shell, compile and run misultin_hello_world by issuing:
 
 (one@rob.loc)1>c(misultin_hello_world).
-{ok,example_simple}
+{ok,misultin_hello_world}
 (one@rob.loc)2>misultin_hello_world:start(8080).
 {ok,<0.50.0>}
 
@@ -62,6 +62,20 @@ API Documentation is available online on the Misultin's wiki: http://code.google
 
 CHANGELOG
 ==========================================================================================================
+
+0.6.1: - added support to websocket protocol hixie draft 76 [thanks to sergio veiga]
+       - added support to multiple websocket draft protocols [for backwards compatibility]
+       - added ws_autoexit option which allows to get an event on websocket controlling processes [issue track #15, suggestion of esente]
+       - added headers also in misultin websockets [thanks to jlirochon]
+       - made it basho's rebar friendly [thanks to mrinalwadhwa]
+
+0.6:   - added HTTP compression option
+       - refactoring of the main server loop, so that it is now isolated from the HTTP functionality
+       - removed unnecessary compilation warnings
+       - replaced proplists:get_value with much faster utility function
+
+0.5:   - added SSL support
+       - refactoring of the acceptor loop
 
 0.4:   - added preliminary websocket support
 

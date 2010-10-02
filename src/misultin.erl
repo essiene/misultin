@@ -32,27 +32,29 @@
 % ==========================================================================================================
 -module(misultin).
 -behaviour(gen_server).
--vsn('0.4.0').
+-vsn("0.6.1").
 
 % gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 % API
--export([start_link/1, start_link/2, stop/0, create_acceptor/0, websocket_pid_add/1, websocket_pid_remove/1]).
+-export([start_link/1, start_link/2, stop/0, persistent_socket_pid_add/1, persistent_socket_pid_remove/1]).
 
 % macros
 -define(SERVER, ?MODULE).
 
 % records
 -record(state, {
+	% tcp
 	listen_socket,
+	socket_mode,
 	port,
-	loop,
+	options,
 	acceptor,
 	recv_timeout,
-	stream_support,
-	ws_loop,
-	ws_references = []
+	persistent_sock_references = [],
+	% misultin
+	custom_opts
 }).
 
 % includes
@@ -78,19 +80,14 @@ start_link(Loop, ConfigPath) when is_function(Loop), is_list(ConfigPath) ->
 stop() ->
 	gen_server:cast(?SERVER, stop).
 
-% Function: -> ok
-% Description: Send message to cause a new acceptor to be created
-create_acceptor() ->
-	gen_server:cast(?SERVER, create_acceptor).
-
 % Function -> ok
-% Description: Adds a new websocket pid reference to status
-websocket_pid_add(WsPid) ->
+% Description: Adds a new persistent socket pid reference to status
+persistent_socket_pid_add(WsPid) ->
 	gen_server:cast(?SERVER, {add_ws_pid, WsPid}).
 
 % Function -> ok
-% Description: Remove a websocket pid reference from status
-websocket_pid_remove(WsPid) ->
+% Description: Remove a persistent socket pid reference from status
+persistent_socket_pid_remove(WsPid) ->
 	gen_server:cast(?SERVER, {remove_ws_pid, WsPid}).
 
 % ============================ /\ API ======================================================================
@@ -107,47 +104,88 @@ init([Options]) ->
 	?LOG_INFO("starting with Pid: ~p", [self()]),
 	% test and get options
 	OptionProps = [
+		% socket
 		{ip, {0, 0, 0, 0}, fun check_and_convert_string_to_ip/1, invalid_ip},
 		{port, 80, fun is_integer/1, port_not_integer},
-		{loop, {error, undefined_loop}, fun is_function/1, loop_not_function},
 		{backlog, 128, fun is_integer/1, backlog_not_integer},
 		{recv_timeout, 30*1000, fun is_integer/1, recv_timeout_not_integer},
+		{ssl, false, fun check_ssl_options/1, invalid_ssl_options},
+		% misultin
+		{compress, false, fun is_boolean/1, invalid_compress_option},
 		{stream_support, true, fun is_boolean/1, invalid_stream_support_option},
-		{ws_loop, none, fun is_function/1, ws_loop_not_function}
+		{loop, {error, undefined_loop}, fun is_function/1, loop_not_function},
+		{ws_loop, none, fun is_function/1, ws_loop_not_function},
+		{ws_autoexit, true, fun is_boolean/1, invalid_ws_autoexit_option}
 	],
 	OptionsVerified = lists:foldl(fun(OptionName, Acc) -> [get_option(OptionName, Options)|Acc] end, [], OptionProps),
 	case proplists:get_value(error, OptionsVerified) of
 		undefined ->
-			% get options
+			% ok, no error found in options
+			% tcp options
 			Ip = proplists:get_value(ip, OptionsVerified),
 			Port = proplists:get_value(port, OptionsVerified),
-			Loop = proplists:get_value(loop, OptionsVerified),
 			Backlog = proplists:get_value(backlog, OptionsVerified),
 			RecvTimeout = proplists:get_value(recv_timeout, OptionsVerified),
+			SslOptions0 = proplists:get_value(ssl, OptionsVerified),
+			% misultin options
+			Compress = proplists:get_value(compress, OptionsVerified),
 			StreamSupport = proplists:get_value(stream_support, OptionsVerified),
+			Loop = proplists:get_value(loop, OptionsVerified),
 			WsLoop = proplists:get_value(ws_loop, OptionsVerified),
+			WsAutoExit = proplists:get_value(ws_autoexit, OptionsVerified),
 			% ipv6 support
 			?LOG_DEBUG("ip address is: ~p", [Ip]),
-			InetOpt = case Ip of
-				{_, _, _, _} ->
-					% IPv4
-					inet;
-				{_, _, _, _, _, _, _, _} ->
-					% IPv6
-					inet6
+			% set additional options according to socket mode if necessary
+			Continue = case SslOptions0 of
+				false ->
+					% without SSL
+					SocketMode = http,
+					InetOpt = case Ip of
+						{_, _, _, _} ->
+							% IPv4
+							inet;
+						{_, _, _, _, _, _, _, _} ->
+							% IPv6
+							inet6
+					end,
+					AdditionalOptions = [InetOpt],
+					true;
+				_ ->
+					% with SSL
+					SocketMode = ssl,
+					% the only current way to use {active, once} in Ssl is to start the crypto module
+					% and set {ssl_imp, new} as SSL option, see
+					% <http://www.erlang.org/cgi-bin/ezmlm-cgi?4:mss:50633:201004:fpopocbfkpppecdembbe>
+					AdditionalOptions = [{ssl_imp, new}|SslOptions0],
+					% start Ssl and crypto applications if necessary, and get outcomes
+					AppStartResults = lists:keyfind(error, 1, [start_application(ssl), start_application(crypto)]),
+					case AppStartResults of
+						false ->
+							% all applications started succesfully
+							true;
+						_ ->
+							% error starting application
+							{error, AppStartResults}
+					end
 			end,
-			% ok, no error found in options -> create listening socket.
-			case gen_tcp:listen(Port, [binary, {packet, http}, InetOpt, {ip, Ip}, {reuseaddr, true}, {active, false}, {backlog, Backlog}]) of
-				{ok, ListenSocket} ->
-					% start listening
-					?LOG_DEBUG("starting listener loop", []),
-					% create acceptor
-					AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop, RecvTimeout, StreamSupport, WsLoop),
-					{ok, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = AcceptorPid, recv_timeout = RecvTimeout, stream_support = StreamSupport, ws_loop = WsLoop}};
-				{error, Reason} ->
-					?LOG_ERROR("error starting: ~p", [Reason]),
-					% error
-					{stop, Reason}
+			% proceed?
+			case Continue of
+				true ->
+					% set options
+					OptionsTcp = [binary, {packet, raw}, {ip, Ip}, {reuseaddr, true}, {active, false}, {backlog, Backlog}|AdditionalOptions],
+					% build custom_opts
+					CustomOpts = #custom_opts{compress = Compress, stream_support = StreamSupport, loop = Loop, ws_loop = WsLoop, ws_autoexit = WsAutoExit},
+					% create listening socket and acceptor
+					case create_listener_and_acceptor(Port, OptionsTcp, RecvTimeout, SocketMode, CustomOpts) of
+						{ok, ListenSocket, AcceptorPid} ->
+							?LOG_DEBUG("listening socket and acceptor succesfully started",[]),
+							{ok, #state{listen_socket = ListenSocket, socket_mode = SocketMode, port = Port, options = OptionsTcp, acceptor = AcceptorPid, recv_timeout = RecvTimeout, custom_opts = CustomOpts}};
+						{error, Reason} ->
+							?LOG_ERROR("error starting listener socket: ~p", [Reason]),
+							{stop, Reason}
+					end;
+				Error ->
+					{stop, Error}
 			end;
 		Reason ->
 			% error found in options
@@ -175,19 +213,13 @@ handle_cast(stop, State) ->
 	?LOG_INFO("manual shutdown..", []),
 	{stop, normal, State};
 
-% create
-handle_cast(create_acceptor, #state{listen_socket = ListenSocket, port = Port, loop = Loop, recv_timeout = RecvTimeout, stream_support = StreamSupport, ws_loop = WsLoop} = State) ->
-	?LOG_DEBUG("creating new acceptor process", []),
-	AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop, RecvTimeout, StreamSupport, WsLoop),
-	{noreply, State#state{acceptor = AcceptorPid}};
+% add persistent socket reference to server
+handle_cast({add_ws_pid, PsPid}, #state{persistent_sock_references = PersistentSockReferences} = State) ->
+	{noreply, State#state{persistent_sock_references = [PsPid|PersistentSockReferences]}};
 
-% add websocket reference to server
-handle_cast({add_ws_pid, WsPid}, #state{ws_references = WsReferences} = State) ->
-	{noreply, State#state{ws_references = [WsPid|WsReferences]}};
-
-% remove websocket reference from server
-handle_cast({remove_ws_pid, WsPid}, #state{ws_references = WsReferences} = State) ->
-	{noreply, State#state{ws_references = lists:delete(WsPid, WsReferences)}};
+% remove persistent socket reference from server
+handle_cast({remove_ws_pid, PsPid}, #state{persistent_sock_references = PersistentSockReferences} = State) ->
+	{noreply, State#state{persistent_sock_references = lists:delete(PsPid, PersistentSockReferences)}};
 	
 % handle_cast generic fallback (ignore)
 handle_cast(_Msg, State) ->
@@ -199,10 +231,13 @@ handle_cast(_Msg, State) ->
 % Description: Handling all non call/cast messages.
 % ----------------------------------------------------------------------------------------------------------
 
-% The current acceptor has died, respawn
-handle_info({'EXIT', Pid, _Reason}, #state{listen_socket = ListenSocket, port = Port, loop = Loop, acceptor = Pid, recv_timeout = RecvTimeout, stream_support = StreamSupport, ws_loop = WsLoop} = State) ->
+% Acceptor died
+% -> shutdown in progress, ignore
+handle_info({'EXIT', Pid, {error, {{accept_failed, {shutdown, _}}}}}, #state{acceptor = Pid} = State) -> {noreply, State};
+% -> respawn listening socket and acceptor
+handle_info({'EXIT', Pid, _Reason}, #state{listen_socket = ListenSocket, socket_mode = SocketMode, port = Port, acceptor = Pid, recv_timeout = RecvTimeout, custom_opts = CustomOpts} = State) ->
 	?LOG_WARNING("acceptor has died with reason: ~p, respawning", [_Reason]),
-	AcceptorPid = misultin_socket:start_link(ListenSocket, Port, Loop, RecvTimeout, StreamSupport, WsLoop),
+	AcceptorPid = misultin_socket:start_link(ListenSocket, Port, RecvTimeout, SocketMode, CustomOpts),
 	{noreply, State#state{acceptor = AcceptorPid}};
 
 % handle_info generic fallback (ignore)
@@ -215,15 +250,15 @@ handle_info(_Info, State) ->
 % Description: This function is called by a gen_server when it is about to terminate. When it returns,
 % the gen_server terminates with Reason. The return value is ignored.
 % ----------------------------------------------------------------------------------------------------------
-terminate(_Reason, #state{listen_socket = ListenSocket, acceptor = AcceptorPid, ws_references = WsReferences}) ->
+terminate(_Reason, #state{listen_socket = ListenSocket, socket_mode = SocketMode, acceptor = AcceptorPid, persistent_sock_references = PersistentSockReferences}) ->
 	?LOG_INFO("shutting down server with Pid ~p", [self()]),
 	% kill acceptor
 	exit(AcceptorPid, kill),
-	% send a shutdown message to all websockets, if any
-	?LOG_DEBUG("sending shutdown message to websockets, if any", []),
-	lists:foreach(fun(WsPid) -> catch WsPid ! shutdown end, WsReferences),
-	% stop gen_tcp
-	gen_tcp:close(ListenSocket),
+	% send a shutdown message to all persistent sockets, if any
+	?LOG_DEBUG("sending shutdown message to persistent sockets, if any", []),
+	lists:foreach(fun(PsPid) -> catch PsPid ! shutdown end, PersistentSockReferences),
+	% stop tcp socket
+	misultin_socket:close(ListenSocket, SocketMode),
 	terminated.
 
 % ----------------------------------------------------------------------------------------------------------
@@ -247,6 +282,19 @@ check_and_convert_string_to_ip(Ip) ->
 		{ok, IpTuple} ->
 			IpTuple
 	end.
+	
+% Function: -> true | false
+% Description: Checks if all necessary Ssl Options have been specified
+check_ssl_options(SslOptions) ->
+	Opts = [verify, fail_if_no_peer_cert, verify_fun, depth, certfile, keyfile, password, cacertfile, ciphers, reuse_sessions, reuse_session],
+	F = fun({Name, _Value}) ->
+		?LOG_DEBUG("testing ~p", [Name]),
+		case lists:member(Name, Opts) of
+			false -> ?LOG_DEBUG("NOT found ~p", [Name]),false;
+			_ -> ?LOG_DEBUG("found ~p", [Name]),true
+		end
+	end,
+	lists:all(F, SslOptions).
 
 % Description: Validate and get misultin options.
 get_option({OptionName, DefaultValue, CheckAndConvertFun, FailTypeError}, Options) ->
@@ -268,4 +316,30 @@ get_option({OptionName, DefaultValue, CheckAndConvertFun, FailTypeError}, Option
 					{OptionName, OutValue}
 			end
 	end.
+
+% Function: -> ok | {error, Reason}
+% Description: Start an application.
+start_application(Application) ->
+	case lists:keyfind(Application, 1, application:which_applications()) of
+		false ->
+			application:start(Application);
+		_ ->
+			ok
+	end.
+
+% Function: -> {ok, ListenSocket, AcceptorPid} | {error, Error}
+% Description: Create listening socket
+create_listener_and_acceptor(Port, Options, RecvTimeout, SocketMode, CustomOpts) ->
+	?LOG_DEBUG("starting listening ~p socket with options ~p on port ~p", [SocketMode, Options, Port]),
+	case misultin_socket:listen(Port, Options, SocketMode) of
+		{ok, ListenSocket} ->
+			?LOG_DEBUG("starting acceptor",[]),
+			% create acceptor
+			AcceptorPid = misultin_socket:start_link(ListenSocket, Port, RecvTimeout, SocketMode, CustomOpts),
+			{ok, ListenSocket, AcceptorPid};
+		{error, Reason} ->
+			% error
+			{error, Reason}
+	end.
+
 % ============================ /\ INTERNAL FUNCTIONS =======================================================
