@@ -38,7 +38,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 % API
--export([start_link/1, stop/0, create_acceptor/0, websocket_pid_add/1, websocket_pid_remove/1]).
+-export([start_link/1, start_link/2, stop/0, create_acceptor/0, websocket_pid_add/1, websocket_pid_remove/1]).
 
 % macros
 -define(SERVER, ?MODULE).
